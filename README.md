@@ -1,52 +1,95 @@
-# JARVIS
+# JARVIS — free, local, Windows voice assistant
 
-A free, local, offline voice assistant for **Windows**. It runs entirely on your own
-machine with [Ollama](https://ollama.com) - no accounts, no API keys, no cloud, no
-subscription. It listens, it answers out loud, and it keeps working with the network
-cable unplugged.
+JARVIS is an Electron app that runs entirely on your PC. No account, no API key,
+no paid plan, no cloud. It talks to a local Ollama model through the Claude Agent
+SDK with `ANTHROPIC_BASE_URL` pointed at `http://127.0.0.1:11434`.
 
-## Install
+> **One app.** v1.3 checks what is already on the machine and installs only the
+> missing pieces. There is no second setup file.
 
-1. Download **JARVIS-Setup.exe** from [Releases](../../releases/latest) and run it.
-   It installs Node, Ollama, the local model, the voice and the engine.
-2. Download **JARVIS-portable-win64.7z**, unpack it anywhere, and double-click
-   **JARVIS.exe** *once*. It installs itself from there:
-   - copies itself to `%LOCALAPPDATA%\Programs\JARVIS`
-   - puts **JARVIS** on the Desktop and in the Start Menu
-   - registers itself in Add or Remove Programs, with a working uninstaller
-   - relaunches from the installed copy, so the shortcut is permanent
+## Get it
 
-   After that, launch it from the desktop icon and forget the folder you unpacked.
+**Release page:** https://github.com/laiss3r/jarvis/releases/latest
 
-## Which models it uses
+| Situation | What to download | Size |
+| --- | --- | --- |
+| New machine | `JARVIS-portable-win64.7z` | 99 MB |
+| You already have the 99 MB app | `JARVIS-UPGRADE.cmd` | 1.5 KB |
+| It won't answer | `JARVIS-CHECK.cmd` | 17 KB |
 
-The app asks Ollama what is installed and lists every model in the MODEL panel, so
-any model you have downloaded can be the brain. Switch while it runs; it restarts the
-engine and remembers your choice. If the configured model is missing it picks the
-best one that exists, and it never picks an embedding model, which cannot talk.
+### New machine
 
-## When it will not answer
+1. Unpack the `.7z` (7-Zip, or Windows 11 right-click → Extract All).
+2. Double-click `JARVIS.exe`. Windows warns once — **More info → Run anyway** (unsigned build).
+3. It copies itself to `%LOCALAPPDATA%\Programs\JARVIS`, creates a **JARVIS** shortcut on the
+   Desktop and in the Start Menu, registers in Add/Remove Programs, and relaunches from the
+   installed copy. Use that shortcut from now on.
+4. If anything is missing, a checklist appears. Click **INSTALL THE MISSING PARTS** once and
+   wait. The installer's output streams into the window. Up to 20–40 minutes if the model has
+   to download (about 2.5 GB).
+5. The interface opens on its own — its own window, not a browser tab.
 
-Download **JARVIS-CHECK.cmd** from the same release and double-click it. It tests every
-hop - Ollama, the model, the Anthropic endpoint the CLI uses, the bridge on 8787, the
-interface on 5173, the install itself - repairs what it can, and ends with a
-`WHERE IT BREAKS` verdict plus `JARVIS-REPORT.txt` on your Desktop.
+### Already downloaded the 99 MB app
 
-## Checksums (SHA-256)
+Do **not** download 99 MB again. Put `JARVIS-UPGRADE.cmd` in the `JARVIS-win32-x64` folder
+next to `JARVIS.exe`, close JARVIS, and double-click the `.cmd`. It downloads a 25 KB patch,
+updates the unpacked folder and the installed copy, and prints `Done`. Then launch `JARVIS.exe`.
+
+## What the checklist checks
+
+| Part | Detected by | If missing |
+| --- | --- | --- |
+| Node.js | `JARVIS_NODE`, Program Files, PATH | winget install |
+| Ollama | local paths, PATH, `/api/version` | winget install + `ollama serve` |
+| A local model | `GET /api/tags` | `ollama pull` of the smallest suitable model |
+| The engine | `%USERPROFILE%\jarvis` with `node_modules` and `bridge/server.mjs` | `git clone` + `npm install` |
+| Claude Code | `claude.exe`, the SDK bundled in the engine, or `~/.claude.json` | official installer, with winget as fallback |
+
+Everything already present is skipped. If a model is already on disk, `jarvis-brain` is
+built **from that model** instead of pulling a new one. Ollama that is installed but not
+running is started before the check, so a rebooted machine isn't mistaken for an empty one.
+
+## Using it
+
+- **MODEL** panel lists every model Ollama has; picking one switches the brain live.
+- `-` / `+` change verbosity; the mic button listens; `Esc` closes blades.
+- `--no-install-prompt` skips the checklist and reports missing parts instead.
+- `--no-install` / `JARVIS_NO_INSTALL=1` run portably without copying to Programs.
+- Logs: `%APPDATA%\JARVIS\desktop.log`.
+- Uninstall: **Add or Remove Programs → JARVIS**. That removes the app, shortcuts and
+  registry entry only — Node, Ollama, your models and the engine are left alone.
+
+## Troubleshooting
+
+Run `JARVIS-CHECK.cmd`. It prints a **WHERE IT BREAKS** block, writes
+`JARVIS-REPORT.txt` on the Desktop, and leaves the window open. Send that block.
+
+Common causes of `thinking` / `words 0`: no model downloaded, Ollama not running, or the
+engine not started. The checklist in v1.3 catches all three before the interface opens.
+
+## Known limitations
+
+- The Electron build cannot use `webkitSpeechRecognition`; microphone capture has to move
+  into the main process. **Not fixed yet.**
+- Unsigned build: SmartScreen warns once.
+- Packaged executable has not been run in this workspace (Linux). Verified here: build,
+  archive integrity, code identity, PowerShell parse of generated scripts, HTML/inline
+  script of the install page, the upgrader's patch flow, and 46 automated checks.
+  Desktop shortcut creation, Ollama discovery and the mic need confirmation on Windows.
+
+## Layout
 
 ```
-95E96D8B90A6A2F21FF65563E49534BCBE37558DE678AD95799A2F3543E23C6E  JARVIS-portable-win64.7z
-DCA10EF79B2E9E16BA2CD2889F5114860FFBC030D15C874E971B5FFCC0482E3B  JARVIS-Setup.exe
+desktop/main.js               Electron main process, diagnosis, installer, engine supervisor
+desktop/preload.js            contextBridge API
+desktop/install-ps.js         shortcut + HKCU uninstall PowerShell generator
+desktop-ui/app.html           interface (model picker, blades, mic)
+install-jarvis-local.ps1      bundled dependency installer (reuse-first)
+installer.nsi                 older NSIS setup, kept for reference
+JARVIS-CHECK.cmd / .ps1       hop-by-hop diagnostic
+tests/                       node tests (model choice, UI, install script, install page)
 ```
 
-Verify on Windows: `certutil -hashfile JARVIS-portable-win64.7z SHA256`
+## License
 
-## Notes
-
-- Unsigned builds: SmartScreen warns once - **More info > Run anyway**.
-- The app is an Electron shell; most of the 99 MB is the Chromium runtime. The
-  assistant itself is about 70 KB of HTML, JavaScript and one installer module.
-- Install skipped? Run with `--no-install`, or see
-  `%LOCALAPPDATA%\JARVIS\desktop\desktop.log`.
-- Uninstalling removes the app, shortcuts and registry entry, and leaves your engine,
-  Node, Ollama and downloaded models alone - those cost hours to get back.
+MIT.
